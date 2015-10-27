@@ -33,7 +33,7 @@ import com.google.zxing.common.BitMatrix;
 public final class WhiteRectangleDetector {
 
   private static final int INIT_SIZE = 10;
-  private static final int CORR = 1;
+  private static final int CORR = 0;
 
   private final BitMatrix image;
   private final int height;
@@ -191,58 +191,55 @@ public final class WhiteRectangleDetector {
 
       int maxSize = right - left;
 
-      ResultPoint z = null;
+      ResultPoint bl = null;
       for (int i = 1; i < maxSize; i++) {
-        z = getBlackPointOnSegment(left, down - i, left + i, down);
-        if (z != null) {
+        bl = getBlackPointOnSegment(left, down - i, left + i, down);
+        if (bl != null) {
           break;
         }
       }
 
-      if (z == null) {
+      if (bl == null) {
         throw NotFoundException.getNotFoundInstance();
       }
 
-      ResultPoint t = null;
-      //go down right
+      ResultPoint tl = null;
       for (int i = 1; i < maxSize; i++) {
-        t = getBlackPointOnSegment(left, up + i, left + i, up);
-        if (t != null) {
+        tl = getBlackPointOnSegment(left, up + i, left + i, up);
+        if (tl != null) {
           break;
         }
       }
 
-      if (t == null) {
+      if (tl == null) {
         throw NotFoundException.getNotFoundInstance();
       }
 
-      ResultPoint x = null;
-      //go down left
+      ResultPoint tr = null;
       for (int i = 1; i < maxSize; i++) {
-        x = getBlackPointOnSegment(right, up + i, right - i, up);
-        if (x != null) {
+        tr = getBlackPointOnSegment(right, up + i, right - i, up);
+        if (tr != null) {
           break;
         }
       }
 
-      if (x == null) {
+      if (tr == null) {
         throw NotFoundException.getNotFoundInstance();
       }
 
-      ResultPoint y = null;
-      //go up left
+      ResultPoint br = null;
       for (int i = 1; i < maxSize; i++) {
-        y = getBlackPointOnSegment(right, down - i, right - i, down);
-        if (y != null) {
+        br = getBlackPointOnSegment(right, down - i, right - i, down);
+        if (br != null) {
           break;
         }
       }
 
-      if (y == null) {
+      if (br == null) {
         throw NotFoundException.getNotFoundInstance();
       }
 
-      return centerEdges(y, z, x, t);
+      return centerEdges(br, bl, tr, tl);
 
     } else {
       throw NotFoundException.getNotFoundInstance();
@@ -267,47 +264,47 @@ public final class WhiteRectangleDetector {
   /**
    * recenters the points of a constant distance towards the center
    *
-   * @param y bottom most point
-   * @param z left most point
-   * @param x right most point
-   * @param t top most point
+   * @param br bottom most point
+   * @param bl left most point
+   * @param tr right most point
+   * @param tl top most point
    * @return {@link ResultPoint}[] describing the corners of the rectangular
    *         region. The first and last points are opposed on the diagonal, as
    *         are the second and third. The first point will be the topmost
    *         point and the last, the bottommost. The second point will be
    *         leftmost and the third, the rightmost
    */
-  private ResultPoint[] centerEdges(ResultPoint y, ResultPoint z,
-                                    ResultPoint x, ResultPoint t) {
+  private ResultPoint[] centerEdges(ResultPoint br, ResultPoint bl,
+                                    ResultPoint tr, ResultPoint tl) {
 
+    // abonnet correction
+    //       tr           tl
+    //  tl                     tr
+    //        br   OR    bl
+    //   bl                   br
     //
-    //       t            t
-    //  z                      x
-    //        x    OR    z
-    //   y                    y
-    //
 
-    float yi = y.getX();
-    float yj = y.getY();
-    float zi = z.getX();
-    float zj = z.getY();
-    float xi = x.getX();
-    float xj = x.getY();
-    float ti = t.getX();
-    float tj = t.getY();
+    float brx = br.getX() - CORR;
+    float bry = br.getY() - CORR;
+    float blx = bl.getX() + CORR;
+    float bly = bl.getY() - CORR;
+    float trx = tr.getX() - CORR;
+    float trY = tr.getY() + CORR;
+    float tlx = tl.getX() + CORR;
+    float tly = tl.getY() + CORR;
 
-    if (yi < width / 2.0f) {
+    if (tlx < blx) {
       return new ResultPoint[]{
-          new ResultPoint(ti - CORR, tj + CORR),
-          new ResultPoint(zi + CORR, zj + CORR),
-          new ResultPoint(xi - CORR, xj - CORR),
-          new ResultPoint(yi + CORR, yj - CORR)};
+          new ResultPoint(trx, trY, ResultPoint.Position.TR),
+          new ResultPoint(tlx, tly, ResultPoint.Position.TL),
+          new ResultPoint(brx, bry, ResultPoint.Position.BR),
+          new ResultPoint(blx, bly, ResultPoint.Position.BL)};
     } else {
       return new ResultPoint[]{
-          new ResultPoint(ti + CORR, tj + CORR),
-          new ResultPoint(zi + CORR, zj - CORR),
-          new ResultPoint(xi - CORR, xj + CORR),
-          new ResultPoint(yi - CORR, yj - CORR)};
+          new ResultPoint(tlx, tly, ResultPoint.Position.TL),
+          new ResultPoint(blx, bly, ResultPoint.Position.BL),
+          new ResultPoint(trx, trY, ResultPoint.Position.TR),
+          new ResultPoint(brx, bry, ResultPoint.Position.BR)};
     }
   }
 

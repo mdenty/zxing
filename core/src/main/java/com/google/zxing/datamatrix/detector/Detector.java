@@ -66,10 +66,10 @@ public final class Detector {
     // as are B and C. Figure out which are the solid black lines
     // by counting transitions
     List<ResultPointsAndTransitions> transitions = new ArrayList<>(4);
-    transitions.add(transitionsBetween(pointA, pointB));
-    transitions.add(transitionsBetween(pointA, pointC));
-    transitions.add(transitionsBetween(pointB, pointD));
-    transitions.add(transitionsBetween(pointC, pointD));
+    transitions.add(newTransitionsBetween(pointB, pointA));
+    transitions.add(newTransitionsBetween(pointA, pointC));
+    transitions.add(newTransitionsBetween(pointB, pointD));
+    transitions.add(newTransitionsBetween(pointD, pointC));
     Collections.sort(transitions, new ResultPointsAndTransitionsComparator());
 
     // Sort by number of transitions. First two will be the two solid sides; last two
@@ -138,8 +138,8 @@ public final class Detector {
     // adjacent to the white module at the top right. Tracing to that corner from either the top left
     // or bottom right should work here.
     
-    int dimensionTop = transitionsBetween(topLeft, topRight).getTransitions();
-    int dimensionRight = transitionsBetween(bottomRight, topRight).getTransitions();
+    int dimensionTop = newTransitionsBetween(topLeft, topRight).getTransitions();
+    int dimensionRight = newTransitionsBetween(bottomRight, topRight).getTransitions();
     
     if ((dimensionTop & 0x01) == 1) {
       // it can't be odd, so, round... up?
@@ -168,8 +168,8 @@ public final class Detector {
         correctedTopRight = topRight;
       }
 
-      dimensionTop = transitionsBetween(topLeft, correctedTopRight).getTransitions();
-      dimensionRight = transitionsBetween(bottomRight, correctedTopRight).getTransitions();
+      dimensionTop = newTransitionsBetween(topLeft, correctedTopRight).getTransitions();
+      dimensionRight = newTransitionsBetween(bottomRight, correctedTopRight).getTransitions();
 
       if ((dimensionTop & 0x01) == 1) {
         // it can't be odd, so, round... up?
@@ -186,7 +186,7 @@ public final class Detector {
     } else {
       // The matrix is square
         
-      int dimension = Math.min(dimensionRight, dimensionTop);
+      int dimension = Math.max(dimensionRight, dimensionTop);
       // correct top right point to match the white module
       correctedTopRight = correctTopRight(bottomLeft, bottomRight, topLeft, topRight, dimension);
       if (correctedTopRight == null){
@@ -194,9 +194,8 @@ public final class Detector {
       }
 
       // Redetermine the dimension using the corrected top right point
-      int dimensionCorrected = Math.max(transitionsBetween(topLeft, correctedTopRight).getTransitions(),
-                                transitionsBetween(bottomRight, correctedTopRight).getTransitions());
-      dimensionCorrected++;
+      int dimensionCorrected = Math.max(newTransitionsBetween(topLeft, correctedTopRight).getTransitions(),
+                                newTransitionsBetween(bottomRight, correctedTopRight).getTransitions());
       if ((dimensionCorrected & 0x01) == 1) {
         dimensionCorrected++;
       }
@@ -208,6 +207,7 @@ public final class Detector {
                         correctedTopRight,
                         dimensionCorrected,
                         dimensionCorrected);
+      log(bits.toString("X", "."));
     }
 
     return new DetectorResult(bits, new ResultPoint[]{topLeft, bottomLeft, bottomRight, correctedTopRight});
@@ -275,14 +275,16 @@ public final class Detector {
     float cos = (topRight.getX() - topLeft.getX()) / norm;
     float sin = (topRight.getY() - topLeft.getY()) / norm;
 
-    ResultPoint c1 = new ResultPoint(topRight.getX() + corr * cos, topRight.getY() + corr * sin);
+    ResultPoint c1 = new ResultPoint(topRight.getX() + corr * cos, topRight.getY() + corr * sin,
+            topRight.getPosition());
 
     corr = distance(bottomLeft, topLeft) / (float) dimension;
     norm = distance(bottomRight, topRight);
     cos = (topRight.getX() - bottomRight.getX()) / norm;
     sin = (topRight.getY() - bottomRight.getY()) / norm;
 
-    ResultPoint c2 = new ResultPoint(topRight.getX() + corr * cos, topRight.getY() + corr * sin);
+    ResultPoint c2 = new ResultPoint(topRight.getX() + corr * cos, topRight.getY() + corr * sin,
+            topRight.getPosition());
 
     if (!isValid(c1)) {
       if (isValid(c2)) {
@@ -294,10 +296,10 @@ public final class Detector {
       return c1;
     }
 
-    int l1 = Math.abs(transitionsBetween(topLeft, c1).getTransitions() -
-                      transitionsBetween(bottomRight, c1).getTransitions());
-    int l2 = Math.abs(transitionsBetween(topLeft, c2).getTransitions() -
-                      transitionsBetween(bottomRight, c2).getTransitions());
+    int l1 = Math.abs(newTransitionsBetween(topLeft, c1).getTransitions() -
+                      newTransitionsBetween(bottomRight, c1).getTransitions()); // 42 - 28
+    int l2 = Math.abs(newTransitionsBetween(topLeft, c2).getTransitions() -
+                      newTransitionsBetween(bottomRight, c2).getTransitions()); // 58 - 16
 
     return l1 <= l2 ? c1 : c2;
   }
@@ -328,17 +330,18 @@ public final class Detector {
 
     GridSampler sampler = GridSampler.getInstance();
 
+    float correction = 0;
     return sampler.sampleGrid(image,
                               dimensionX,
                               dimensionY,
-                              0.5f,
-                              0.5f,
-                              dimensionX - 0.5f,
-                              0.5f,
-                              dimensionX - 0.5f,
-                              dimensionY - 0.5f,
-                              0.5f,
-                              dimensionY - 0.5f,
+                              correction,
+                              correction,
+                              dimensionX - correction,
+                              correction,
+                              dimensionX - correction,
+                              dimensionY - correction,
+                              correction,
+                              dimensionY - correction,
                               topLeft.getX(),
                               topLeft.getY(),
                               topRight.getX(),
@@ -393,6 +396,127 @@ public final class Detector {
     return new ResultPointsAndTransitions(from, to, transitions);
   }
 
+  private static final int MIN_TRANSITION_SIZE = 2;
+
+  private ResultPointsAndTransitions newTransitionsBetween(final ResultPoint from, final ResultPoint to) {
+    // See QR Code Detector, sizeOfBlackWhiteBlackRun()
+    log("newTransitions between %s and %s", from, to);
+    ResultPoint corrFrom = from, corrTo = to;
+    if (shouldInverseToReorder(from, to)) {
+      ResultPoint tmp = corrFrom;
+      corrFrom = corrTo;
+      corrTo = tmp;
+    }
+    corrFrom = correctResultPoint(corrFrom, corrTo);
+    corrTo = correctResultPoint(corrTo, corrFrom);
+    int fromX = (int) (corrFrom.getX() + 0.5f);
+    int fromY = (int) (corrFrom.getY() + 0.5f) ;
+    int toX = (int) (corrTo.getX() + 0.5f);
+    int toY = (int) (corrTo.getY() + 0.5f);
+    log("corrected points %s and %s", corrFrom, corrTo);
+    boolean steep = Math.abs(toY - fromY) > Math.abs(toX - fromX);
+    if (steep) {
+      int temp = fromX;
+      fromX = fromY;
+      fromY = temp;
+      temp = toX;
+      toX = toY;
+      toY = temp;
+    }
+
+    int dx = Math.abs(toX - fromX);
+    int dy = Math.abs(toY - fromY);
+
+    int error = -dx / 2;
+    int ystep = fromY < toY ? 1 : -1;
+    int xstep = fromX < toX ? 1 : -1;
+    int transitions = 0;
+    int transitionSize = -1;
+    boolean inBlack = isBlack(fromX, fromY, steep);
+    for (int x = fromX, y = fromY; x != toX; x += xstep) {
+      boolean isBlack = isBlack(x, y, steep);
+      if (isBlack != inBlack) {
+        if (transitionSize > 0) {
+          transitionSize = -1;
+        } else {
+          transitionSize = 1;
+        }
+        inBlack = isBlack;
+      } else if (transitionSize >= 0) {
+        transitionSize++;
+        if (transitionSize >= MIN_TRANSITION_SIZE) {
+          log("new transition %s", new ResultPoint(steep ? y : x, steep ? x : y));
+          transitions++;
+          transitionSize = -1;
+        }
+      }
+      error += dy;
+      if (error > 0) {
+        if (y == toY) {
+          break;
+        }
+        y += ystep;
+        error -= dx;
+      }
+    }
+    return new ResultPointsAndTransitions(from, to, transitions);
+  }
+
+  private boolean isBlack(int x, int y, boolean steep) {
+    final int x1, x2, x3, y1, y2, y3;
+    if (steep) {
+      y1 = y2 = y3 = x;
+      x1 = y;
+      x2 = y-1;
+      x3 = y+1;
+    } else {
+      x1 = x2 = x3 = x;
+      y1 = y;
+      y2 = y-1;
+      y3 = y+1;
+    }
+    int cpt = 0;
+    if (image.get(x1, y1)) {
+      cpt++;
+    }
+    if (image.get(x2, y2)) {
+      cpt++;
+    }
+    if (image.get(x3, y3)) {
+      cpt++;
+    }
+    return cpt > 1;
+  }
+
+  private ResultPoint correctResultPoint(ResultPoint resultPoint, ResultPoint to) {
+    if (resultPoint.getPosition() == null) {
+      return resultPoint;
+    }
+    float x = resultPoint.getX(), y = resultPoint.getY();
+    float correction = estimateCorrection(resultPoint, to);
+    log("correction %s", correction);
+    switch (resultPoint.getPosition()) {
+      case TL:
+        return new ResultPoint(x + correction, y + correction);
+      case TR:
+        return new ResultPoint(x - correction, y + correction);
+      case BL:
+        return new ResultPoint(x + correction, y - correction);
+      case BR:
+      default:
+        return new ResultPoint(x - correction, y - correction);
+    }
+  }
+
+  private float estimateCorrection(ResultPoint resultPoint, ResultPoint to) {
+    float distance = distance(resultPoint, to);
+    return distance / (60 * 3.5f);
+  }
+
+  private boolean shouldInverseToReorder(ResultPoint from,  ResultPoint to) {
+    return from.getX() > to.getX();
+  }
+
   /**
    * Simply encapsulates two points and a number of transitions between them.
    */
@@ -434,6 +558,13 @@ public final class Detector {
     @Override
     public int compare(ResultPointsAndTransitions o1, ResultPointsAndTransitions o2) {
       return o1.getTransitions() - o2.getTransitions();
+    }
+  }
+
+  private static final boolean DO_LOG = false;
+  private static void log(String format, Object... args) {
+    if (DO_LOG) {
+      System.out.println(String.format(format, args));
     }
   }
 

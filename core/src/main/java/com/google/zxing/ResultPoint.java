@@ -26,12 +26,24 @@ import com.google.zxing.common.detector.MathUtils;
  */
 public class ResultPoint {
 
+  public enum Position {
+    TL, TR, BR, BL
+  }
+
   private final float x;
   private final float y;
+  private final Position position;
 
   public ResultPoint(float x, float y) {
     this.x = x;
     this.y = y;
+    this.position = null;
+  }
+
+  public ResultPoint(float x, float y, Position position) {
+    this.x = x;
+    this.y = y;
+    this.position = position;
   }
 
   public final float getX() {
@@ -40,6 +52,10 @@ public class ResultPoint {
 
   public final float getY() {
     return y;
+  }
+
+  public Position getPosition() {
+    return position;
   }
 
   @Override
