@@ -23,6 +23,7 @@ import com.google.zxing.common.DetectorResult;
 import com.google.zxing.common.GridSampler;
 import com.google.zxing.common.detector.MathUtils;
 import com.google.zxing.common.detector.WhiteRectangleDetector;
+import com.sun.org.apache.xpath.internal.operations.Bool;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -40,12 +41,29 @@ import java.util.Map;
  */
 public final class Detector {
 
-  private static final boolean DO_LOG = false;
-  private static final float SAMPLING_CORRECTION = 0;
-  private static final boolean CORRECT_POINTS = true;
-  private static final boolean USE_3_POINTS_IN_TRANSITION = true;
-  private static final boolean DETECT_MULTI_PIXELS_TRANSITION = true;
-  private static final boolean FORCE_SQUARE_DATAMATRIX = true;
+  public enum DatamatrixForm {
+    AUTO,
+    SQUARE,
+    RECTANGLE
+  }
+
+  private static final boolean DO_LOG = Boolean.getBoolean("zxing.datamatrix.debug");
+  private static final float SAMPLING_CORRECTION = Float.parseFloat(System.getProperty("zxing.datamatrix.transform.correction.value", "0.2"));
+  private static final boolean CORRECT_POINTS = Boolean.getBoolean("zxing.datamatrix.disable.correct.corner.position");
+  private static final boolean USE_3_POINTS_IN_TRANSITION = Boolean.getBoolean("zxing.datamatrix.disable.3.points.sampler");
+  private static final boolean DETECT_MULTI_PIXELS_TRANSITION = Boolean.getBoolean("zxing.datamatrix.disable.transition.correction");
+  private static final DatamatrixForm FORCE_SQUARE_DATAMATRIX;
+
+  static {
+    DatamatrixForm df;
+    try {
+      df = DatamatrixForm.valueOf(System.getProperty("zxing.datamatrix.form"));
+    } catch (Exception e) {
+      log("Property zxing.datamatrix.form is invalid. Valid values are AUTO, SQUARE, RECTANGLE. AUTO was chosen.");
+      df = DatamatrixForm.AUTO;
+    }
+    FORCE_SQUARE_DATAMATRIX = df;
+  }
 
   private final BitMatrix image;
   private final WhiteRectangleDetector rectangleDetector;
@@ -166,7 +184,7 @@ public final class Detector {
     // Rectanguar symbols are 6x16, 6x28, 10x24, 10x32, 14x32, or 14x44. If one dimension is more
     // than twice the other, it's certainly rectangular, but to cut a bit more slack we accept it as
     // rectangular if the bigger side is at least 7/4 times the other:
-    if (!FORCE_SQUARE_DATAMATRIX && (4 * dimensionTop >= 7 * dimensionRight || 4 * dimensionRight >= 7 * dimensionTop)) {
+    if (FORCE_SQUARE_DATAMATRIX == DatamatrixForm.RECTANGLE || (FORCE_SQUARE_DATAMATRIX == DatamatrixForm.AUTO && (4 * dimensionTop >= 7 * dimensionRight || 4 * dimensionRight >= 7 * dimensionTop))) {
       // The matrix is rectangular
 
       correctedTopRight =
