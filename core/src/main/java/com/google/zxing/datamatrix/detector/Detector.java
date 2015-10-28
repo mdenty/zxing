@@ -40,6 +40,13 @@ import java.util.Map;
  */
 public final class Detector {
 
+  private static final boolean DO_LOG = false;
+  private static final float SAMPLING_CORRECTION = 0;
+  private static final boolean CORRECT_POINTS = true;
+  private static final boolean USE_3_POINTS_IN_TRANSITION = true;
+  private static final boolean DETECT_MULTI_PIXELS_TRANSITION = true;
+  private static final boolean FORCE_SQUARE_DATAMATRIX = true;
+
   private final BitMatrix image;
   private final WhiteRectangleDetector rectangleDetector;
 
@@ -159,7 +166,7 @@ public final class Detector {
     // Rectanguar symbols are 6x16, 6x28, 10x24, 10x32, 14x32, or 14x44. If one dimension is more
     // than twice the other, it's certainly rectangular, but to cut a bit more slack we accept it as
     // rectangular if the bigger side is at least 7/4 times the other:
-    if (4 * dimensionTop >= 7 * dimensionRight || 4 * dimensionRight >= 7 * dimensionTop) {
+    if (!FORCE_SQUARE_DATAMATRIX && (4 * dimensionTop >= 7 * dimensionRight || 4 * dimensionRight >= 7 * dimensionTop)) {
       // The matrix is rectangular
 
       correctedTopRight =
@@ -194,8 +201,8 @@ public final class Detector {
       }
 
       // Redetermine the dimension using the corrected top right point
-      int dimensionCorrected = Math.max(newTransitionsBetween(topLeft, correctedTopRight).getTransitions(),
-                                newTransitionsBetween(bottomRight, correctedTopRight).getTransitions());
+      int dimensionCorrected = Math.max(newTransitionsBetween(topLeft, correctedTopRight, dimension).getTransitions(),
+                                newTransitionsBetween(bottomRight, correctedTopRight, dimension).getTransitions());
       if ((dimensionCorrected & 0x01) == 1) {
         dimensionCorrected++;
       }
@@ -224,19 +231,19 @@ public final class Detector {
                                                  int dimensionTop,
                                                  int dimensionRight) {
 
-    float corr = distance(bottomLeft, bottomRight) / (float)dimensionTop;
-    int norm = distance(topLeft, topRight);
+    float corr = distanceRounded(bottomLeft, bottomRight) / (float)dimensionTop;
+    int norm = distanceRounded(topLeft, topRight);
     float cos = (topRight.getX() - topLeft.getX()) / norm;
     float sin = (topRight.getY() - topLeft.getY()) / norm;
 
-    ResultPoint c1 = new ResultPoint(topRight.getX()+corr*cos, topRight.getY()+corr*sin);
+    ResultPoint c1 = new ResultPoint(topRight.getX()+corr*cos, topRight.getY()+corr*sin, topRight.getPosition());
 
-    corr = distance(bottomLeft, topLeft) / (float)dimensionRight;
-    norm = distance(bottomRight, topRight);
+    corr = distanceRounded(bottomLeft, topLeft) / (float)dimensionRight;
+    norm = distanceRounded(bottomRight, topRight);
     cos = (topRight.getX() - bottomRight.getX()) / norm;
     sin = (topRight.getY() - bottomRight.getY()) / norm;
 
-    ResultPoint c2 = new ResultPoint(topRight.getX()+corr*cos, topRight.getY()+corr*sin);
+    ResultPoint c2 = new ResultPoint(topRight.getX()+corr*cos, topRight.getY()+corr*sin, topRight.getPosition());
 
     if (!isValid(c1)) {
       if (isValid(c2)) {
@@ -248,10 +255,10 @@ public final class Detector {
       return c1;
     }
 
-    int l1 = Math.abs(dimensionTop - transitionsBetween(topLeft, c1).getTransitions()) +
-          Math.abs(dimensionRight - transitionsBetween(bottomRight, c1).getTransitions());
-    int l2 = Math.abs(dimensionTop - transitionsBetween(topLeft, c2).getTransitions()) +
-    Math.abs(dimensionRight - transitionsBetween(bottomRight, c2).getTransitions());
+    int l1 = Math.abs(dimensionTop - newTransitionsBetween(topLeft, c1, dimensionTop).getTransitions()) +
+          Math.abs(dimensionRight - newTransitionsBetween(bottomRight, c1, dimensionRight).getTransitions());
+    int l2 = Math.abs(dimensionTop - newTransitionsBetween(topLeft, c2, dimensionTop).getTransitions()) +
+    Math.abs(dimensionRight - newTransitionsBetween(bottomRight, c2, dimensionRight).getTransitions());
 
     if (l1 <= l2){
       return c1;
@@ -270,16 +277,16 @@ public final class Detector {
                                       ResultPoint topRight,
                                       int dimension) {
 
-    float corr = distance(bottomLeft, bottomRight) / (float) dimension;
-    int norm = distance(topLeft, topRight);
+    float corr = distanceRounded(bottomLeft, bottomRight) / (float) dimension;
+    int norm = distanceRounded(topLeft, topRight);
     float cos = (topRight.getX() - topLeft.getX()) / norm;
     float sin = (topRight.getY() - topLeft.getY()) / norm;
 
     ResultPoint c1 = new ResultPoint(topRight.getX() + corr * cos, topRight.getY() + corr * sin,
             topRight.getPosition());
 
-    corr = distance(bottomLeft, topLeft) / (float) dimension;
-    norm = distance(bottomRight, topRight);
+    corr = distanceRounded(bottomLeft, topLeft) / (float) dimension;
+    norm = distanceRounded(bottomRight, topRight);
     cos = (topRight.getX() - bottomRight.getX()) / norm;
     sin = (topRight.getY() - bottomRight.getY()) / norm;
 
@@ -296,10 +303,10 @@ public final class Detector {
       return c1;
     }
 
-    int l1 = Math.abs(newTransitionsBetween(topLeft, c1).getTransitions() -
-                      newTransitionsBetween(bottomRight, c1).getTransitions()); // 42 - 28
-    int l2 = Math.abs(newTransitionsBetween(topLeft, c2).getTransitions() -
-                      newTransitionsBetween(bottomRight, c2).getTransitions()); // 58 - 16
+    int l1 = Math.abs(newTransitionsBetween(topLeft, c1, dimension).getTransitions() -
+                      newTransitionsBetween(bottomRight, c1, dimension).getTransitions());
+    int l2 = Math.abs(newTransitionsBetween(topLeft, c2, dimension).getTransitions() -
+                      newTransitionsBetween(bottomRight, c2, dimension).getTransitions());
 
     return l1 <= l2 ? c1 : c2;
   }
@@ -308,9 +315,14 @@ public final class Detector {
     return p.getX() >= 0 && p.getX() < image.getWidth() && p.getY() > 0 && p.getY() < image.getHeight();
   }
 
-  private static int distance(ResultPoint a, ResultPoint b) {
-    return MathUtils.round(ResultPoint.distance(a, b));
+  private static int distanceRounded(ResultPoint a, ResultPoint b) {
+    return MathUtils.round(distance(a, b));
   }
+
+  private static float distance(ResultPoint a, ResultPoint b) {
+    return ResultPoint.distance(a, b);
+  }
+
 
   /**
    * Increments the Integer associated with a key by one.
@@ -330,7 +342,7 @@ public final class Detector {
 
     GridSampler sampler = GridSampler.getInstance();
 
-    float correction = 0;
+    float correction = SAMPLING_CORRECTION;
     return sampler.sampleGrid(image,
                               dimensionX,
                               dimensionY,
@@ -352,53 +364,11 @@ public final class Detector {
                               bottomLeft.getY());
   }
 
-  /**
-   * Counts the number of black/white transitions between two points, using something like Bresenham's algorithm.
-   */
-  private ResultPointsAndTransitions transitionsBetween(ResultPoint from, ResultPoint to) {
-    // See QR Code Detector, sizeOfBlackWhiteBlackRun()
-    int fromX = (int) from.getX();
-    int fromY = (int) from.getY();
-    int toX = (int) to.getX();
-    int toY = (int) to.getY();
-    boolean steep = Math.abs(toY - fromY) > Math.abs(toX - fromX);
-    if (steep) {
-      int temp = fromX;
-      fromX = fromY;
-      fromY = temp;
-      temp = toX;
-      toX = toY;
-      toY = temp;
-    }
-
-    int dx = Math.abs(toX - fromX);
-    int dy = Math.abs(toY - fromY);
-    int error = -dx / 2;
-    int ystep = fromY < toY ? 1 : -1;
-    int xstep = fromX < toX ? 1 : -1;
-    int transitions = 0;
-    boolean inBlack = image.get(steep ? fromY : fromX, steep ? fromX : fromY);
-    for (int x = fromX, y = fromY; x != toX; x += xstep) {
-      boolean isBlack = image.get(steep ? y : x, steep ? x : y);
-      if (isBlack != inBlack) {
-        transitions++;
-        inBlack = isBlack;
-      }
-      error += dy;
-      if (error > 0) {
-        if (y == toY) {
-          break;
-        }
-        y += ystep;
-        error -= dx;
-      }
-    }
-    return new ResultPointsAndTransitions(from, to, transitions);
+  private ResultPointsAndTransitions newTransitionsBetween(final ResultPoint from, final ResultPoint to) {
+    return newTransitionsBetween(from, to, 50);
   }
 
-  private static final int MIN_TRANSITION_SIZE = 2;
-
-  private ResultPointsAndTransitions newTransitionsBetween(final ResultPoint from, final ResultPoint to) {
+  private ResultPointsAndTransitions newTransitionsBetween(final ResultPoint from, final ResultPoint to, float dimension) {
     // See QR Code Detector, sizeOfBlackWhiteBlackRun()
     log("newTransitions between %s and %s", from, to);
     ResultPoint corrFrom = from, corrTo = to;
@@ -407,8 +377,10 @@ public final class Detector {
       corrFrom = corrTo;
       corrTo = tmp;
     }
-    corrFrom = correctResultPoint(corrFrom, corrTo);
-    corrTo = correctResultPoint(corrTo, corrFrom);
+    if (CORRECT_POINTS) {
+      corrFrom = correctResultPoint(corrFrom, corrTo, dimension);
+      corrTo = correctResultPoint(corrTo, corrFrom, dimension);
+    }
     int fromX = (int) (corrFrom.getX() + 0.5f);
     int fromY = (int) (corrFrom.getY() + 0.5f) ;
     int toX = (int) (corrTo.getX() + 0.5f);
@@ -433,6 +405,11 @@ public final class Detector {
     int transitions = 0;
     int transitionSize = -1;
     boolean inBlack = isBlack(fromX, fromY, steep);
+    int minTransitionSize = Math.max(estimateModuleSizeInPixel(from, to, dimension) / 2, 1);
+    minTransitionSize = Math.min(minTransitionSize, 4);
+    if (!DETECT_MULTI_PIXELS_TRANSITION) {
+      minTransitionSize = 1;
+    }
     for (int x = fromX, y = fromY; x != toX; x += xstep) {
       boolean isBlack = isBlack(x, y, steep);
       if (isBlack != inBlack) {
@@ -444,11 +421,11 @@ public final class Detector {
         inBlack = isBlack;
       } else if (transitionSize >= 0) {
         transitionSize++;
-        if (transitionSize >= MIN_TRANSITION_SIZE) {
-          log("new transition %s", new ResultPoint(steep ? y : x, steep ? x : y));
-          transitions++;
-          transitionSize = -1;
-        }
+      }
+      if (transitionSize >= minTransitionSize) {
+        log("new transition %s", new ResultPoint(steep ? y : x, steep ? x : y));
+        transitions++;
+        transitionSize = -1;
       }
       error += dy;
       if (error > 0) {
@@ -459,10 +436,17 @@ public final class Detector {
         error -= dx;
       }
     }
+    if (transitionSize > 0 && transitionSize < minTransitionSize) {
+      log("new transition at end");
+      transitions++;
+    }
     return new ResultPointsAndTransitions(from, to, transitions);
   }
 
   private boolean isBlack(int x, int y, boolean steep) {
+    if (!USE_3_POINTS_IN_TRANSITION) {
+      return image.get(steep ?y : x, steep ? x : y);
+    }
     final int x1, x2, x3, y1, y2, y3;
     if (steep) {
       y1 = y2 = y3 = x;
@@ -488,12 +472,12 @@ public final class Detector {
     return cpt > 1;
   }
 
-  private ResultPoint correctResultPoint(ResultPoint resultPoint, ResultPoint to) {
+  private ResultPoint correctResultPoint(ResultPoint resultPoint, ResultPoint to, float dimension) {
     if (resultPoint.getPosition() == null) {
       return resultPoint;
     }
     float x = resultPoint.getX(), y = resultPoint.getY();
-    float correction = estimateCorrection(resultPoint, to);
+    float correction = estimateCorrection(resultPoint, to, dimension);
     log("correction %s", correction);
     switch (resultPoint.getPosition()) {
       case TL:
@@ -508,9 +492,13 @@ public final class Detector {
     }
   }
 
-  private float estimateCorrection(ResultPoint resultPoint, ResultPoint to) {
+  private float estimateCorrection(ResultPoint resultPoint, ResultPoint to, float dimension) {
     float distance = distance(resultPoint, to);
-    return distance / (60 * 3.5f);
+    return distance / (dimension * 4f);
+  }
+
+  private int estimateModuleSizeInPixel(ResultPoint from, ResultPoint to, float dimension) {
+    return Math.round(distance(from, to) / dimension);
   }
 
   private boolean shouldInverseToReorder(ResultPoint from,  ResultPoint to) {
@@ -561,7 +549,6 @@ public final class Detector {
     }
   }
 
-  private static final boolean DO_LOG = false;
   private static void log(String format, Object... args) {
     if (DO_LOG) {
       System.out.println(String.format(format, args));

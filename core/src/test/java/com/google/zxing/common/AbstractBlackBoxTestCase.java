@@ -36,6 +36,7 @@ import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -58,14 +59,24 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
 
   private static final Logger log = Logger.getLogger(AbstractBlackBoxTestCase.class.getSimpleName());
 
+  private final boolean saveRotatedImages;
+
   private final Path testBase;
   private final Reader barcodeReader;
   private final BarcodeFormat expectedFormat;
   private final List<TestResult> testResults;
 
+
   protected AbstractBlackBoxTestCase(String testBasePathSuffix,
                                      Reader barcodeReader,
                                      BarcodeFormat expectedFormat) {
+    this(testBasePathSuffix, barcodeReader, expectedFormat, false);
+  }
+
+  protected AbstractBlackBoxTestCase(String testBasePathSuffix,
+                                     Reader barcodeReader,
+                                     BarcodeFormat expectedFormat,
+                                     boolean saveRotatedImages) {
     // A little workaround to prevent aggravation in my IDE
     Path testBase = Paths.get(testBasePathSuffix);
     if (!Files.exists(testBase)) {
@@ -76,6 +87,7 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
     this.barcodeReader = barcodeReader;
     this.expectedFormat = expectedFormat;
     testResults = new ArrayList<>();
+    this.saveRotatedImages = saveRotatedImages;
 
     System.setProperty("java.util.logging.SimpleFormatter.format", "%4$s: %5$s%6$s%n");
   }
@@ -167,6 +179,11 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
       for (int x = 0; x < testCount; x++) {
         float rotation = testResults.get(x).getRotation();
         BufferedImage rotatedImage = rotateImage(image, rotation);
+        if (saveRotatedImages && rotation != 0) {
+          File rotatedImageFile = new File(testImage.getParent().toFile(),
+                  fileBaseName + "_rotated_" + ((int) rotation) + ".png");
+          ImageIO.write(rotatedImage, "png", rotatedImageFile);
+        }
         LuminanceSource source = new BufferedImageLuminanceSource(rotatedImage);
         BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
         try {
@@ -185,7 +202,7 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
             tryHaderMisreadCounts[x]++;
           }
         } catch (ReaderException ignored) {
-          log.fine(String.format("could not read at rotation %f w/TH", rotation));
+          log.info(String.format("could not read at rotation %f w/TH", rotation));
         }
       }
     }
@@ -324,7 +341,7 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
     // Transform simply to find out the new bounding box (don't actually run the image through it)
     AffineTransform at = new AffineTransform();
     at.rotate(radians, original.getWidth() / 2.0, original.getHeight() / 2.0);
-    BufferedImageOp op = new AffineTransformOp(at, AffineTransformOp.TYPE_BICUBIC);
+    BufferedImageOp op = new AffineTransformOp(at, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
 
     RectangularShape r = op.getBounds2D(original);
     int width = (int) Math.ceil(r.getWidth());
@@ -336,7 +353,7 @@ public abstract class AbstractBlackBoxTestCase extends Assert {
     at.rotate(radians, width / 2.0, height / 2.0);
     at.translate((width - original.getWidth()) / 2.0,
                  (height - original.getHeight()) / 2.0);
-    op = new AffineTransformOp(at, AffineTransformOp.TYPE_BICUBIC);
+    op = new AffineTransformOp(at, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
 
     return op.filter(original, new BufferedImage(width, height, original.getType()));
   }

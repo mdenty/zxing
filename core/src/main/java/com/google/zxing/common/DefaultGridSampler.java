@@ -66,7 +66,7 @@ public final class DefaultGridSampler extends GridSampler {
       checkAndNudgePoints(image, points);
       try {
         for (int x = 0; x < max; x += 2) {
-          if (image.get((int) points[x], (int) points[x + 1])) {
+          if (image.get((int) (points[x]+0.5), (int) (points[x + 1]+0.5))) {
             // Black(-ish) pixel
             bits.set(x / 2, y);
           }

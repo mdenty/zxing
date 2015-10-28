@@ -27,6 +27,7 @@ public final class DataMatrixBlackBox2TestCase extends AbstractBlackBoxTestCase 
 
   public DataMatrixBlackBox2TestCase() {
     super("src/test/resources/blackbox/datamatrix-2", new MultiFormatReader(), BarcodeFormat.DATA_MATRIX);
+    //super("src/test/resources/blackbox/datamatrix-2", new MultiFormatReader(), BarcodeFormat.DATA_MATRIX, true);
     addTest(8, 8, 0, 1, 0.0f);
     addTest(14, 14, 0, 1, 90.0f);
     addTest(14, 14, 0, 1, 180.0f);

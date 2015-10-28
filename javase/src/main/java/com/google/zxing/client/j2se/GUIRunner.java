@@ -18,28 +18,21 @@ package com.google.zxing.client.j2se;
 
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.LuminanceSource;
-import com.google.zxing.MultiFormatReader;
 import com.google.zxing.ReaderException;
 import com.google.zxing.Result;
+import com.google.zxing.common.GlobalHistogramBinarizer;
 import com.google.zxing.common.HybridBinarizer;
+import com.google.zxing.datamatrix.DataMatrixReader;
 
-import java.awt.Container;
-import java.awt.Dimension;
-import java.awt.FlowLayout;
-import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.nio.file.Path;
-
-import javax.swing.Icon;
-import javax.swing.ImageIcon;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.JTextArea;
-import javax.swing.WindowConstants;
+import javax.swing.*;
 import javax.swing.text.JTextComponent;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * <p>Simple GUI frontend to the library. Right now, only decodes a local file.
@@ -68,21 +61,37 @@ public final class GUIRunner extends JFrame {
     setLocationRelativeTo(null);
   }
 
-  public static void main(String[] args) throws MalformedURLException {
+  public static void main(String[] args) throws IOException {
     GUIRunner runner = new GUIRunner();
     runner.setVisible(true);
     runner.chooseImage();
   }
 
-  private void chooseImage() throws MalformedURLException {
+  private void chooseImage() throws IOException {
     JFileChooser fileChooser = new JFileChooser();
+    fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+    //fileChooser.setCurrentDirectory(new File("/home/abonnet/Workspace/projects/zxing/core/src/test/resources/blackbox/datamatrix-2"));
+    //fileChooser.setCurrentDirectory(new File("/home/abonnet/Workspace/projects/TessiMobile/docs"));
     fileChooser.showOpenDialog(this);
     Path file = fileChooser.getSelectedFile().toPath();
     Icon imageIcon = new ImageIcon(file.toUri().toURL());
     setSize(imageIcon.getIconWidth(), imageIcon.getIconHeight() + 100);
     imageLabel.setIcon(imageIcon);
-    String decodeText = getDecodeText(file);
-    textArea.setText(decodeText);
+    if (Files.isDirectory(file)) {
+      try (DirectoryStream<Path> stream = Files.newDirectoryStream(file)) {
+        for (Path entry : stream) {
+          if (Files.isDirectory(entry)) {
+            continue;
+          }
+          String decodeText = getDecodeText(entry);
+          System.out.println(String.format("%s : %s", entry.getFileName(), decodeText));
+        }
+      }
+    } else {
+      String decodeText = getDecodeText(file);
+      System.out.println(String.format("%s : %s", file, decodeText));
+      textArea.setText(decodeText);
+    }
   }
 
   private static String getDecodeText(Path file) {
@@ -96,7 +105,7 @@ public final class GUIRunner extends JFrame {
     BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
     Result result;
     try {
-      result = new MultiFormatReader().decode(bitmap);
+      result = new DataMatrixReader().decode(bitmap);
     } catch (ReaderException re) {
       return re.toString();
     }
