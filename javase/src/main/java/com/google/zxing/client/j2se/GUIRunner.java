@@ -29,10 +29,13 @@ import javax.swing.text.JTextComponent;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Properties;
 
 /**
  * <p>Simple GUI frontend to the library. Right now, only decodes a local file.
@@ -42,8 +45,11 @@ import java.nio.file.Path;
  */
 public final class GUIRunner extends JFrame {
 
+  public static final String ZING_GUI = ".zing-gui";
+  public static final String LAST_PATH = "lastPath";
   private final JLabel imageLabel;
   private final JTextComponent textArea;
+  private final Properties prefs = new Properties();
 
   private GUIRunner() {
     imageLabel = new JLabel();
@@ -62,22 +68,52 @@ public final class GUIRunner extends JFrame {
   }
 
   public static void main(String[] args) throws IOException {
-    GUIRunner runner = new GUIRunner();
+    final GUIRunner runner = new GUIRunner();
     runner.setVisible(true);
-    runner.chooseImage();
+    EventQueue.invokeLater(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          runner.chooseImage();
+        } catch (IOException e) {
+          e.printStackTrace();
+          System.exit(1);
+        }
+      }
+    });
+  }
+
+  private final synchronized void savePrefs() throws IOException {
+    final String homeDir = System.getProperty("user.home");
+    final File prefFile = new File(homeDir, ZING_GUI);
+    try(FileOutputStream out = new FileOutputStream(prefFile)) {
+      prefs.storeToXML(out, "Zxing-gui preferences");
+    }
   }
 
   private void chooseImage() throws IOException {
-    JFileChooser fileChooser = new JFileChooser();
+    final JFileChooser fileChooser = new JFileChooser();
     fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
-    //fileChooser.setCurrentDirectory(new File("/home/abonnet/Workspace/projects/zxing/core/src/test/resources/blackbox/datamatrix-2"));
-    //fileChooser.setCurrentDirectory(new File("/home/abonnet/Workspace/projects/TessiMobile/docs"));
+
+    final String homeDir = System.getProperty("user.home");
+    final File prefFile = new File(homeDir, ZING_GUI);
+    if (prefFile.exists()) {
+      try(FileInputStream in = new FileInputStream(prefFile)) {
+        prefs.loadFromXML(in);
+      }
+    }
+    final String initPath = prefs.getProperty(LAST_PATH, homeDir);
+    fileChooser.setCurrentDirectory(new File(initPath));
+
     fileChooser.showOpenDialog(this);
     Path file = fileChooser.getSelectedFile().toPath();
     Icon imageIcon = new ImageIcon(file.toUri().toURL());
     setSize(imageIcon.getIconWidth(), imageIcon.getIconHeight() + 100);
     imageLabel.setIcon(imageIcon);
     if (Files.isDirectory(file)) {
+      prefs.setProperty(LAST_PATH, file.toString());
+      savePrefs();
+
       try (DirectoryStream<Path> stream = Files.newDirectoryStream(file)) {
         for (Path entry : stream) {
           if (Files.isDirectory(entry)) {
@@ -88,6 +124,9 @@ public final class GUIRunner extends JFrame {
         }
       }
     } else {
+      prefs.setProperty(LAST_PATH, file.getParent().toString());
+      savePrefs();
+
       String decodeText = getDecodeText(file);
       System.out.println(String.format("%s : %s", file, decodeText));
       textArea.setText(decodeText);
