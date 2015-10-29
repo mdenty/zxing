@@ -23,6 +23,8 @@ import com.google.zxing.NotFoundException;
  */
 public final class DefaultGridSampler extends GridSampler {
 
+  private static final boolean DO_LOG = Boolean.getBoolean("zxing.datamatrix.debug");
+
   @Override
   public BitMatrix sampleGrid(BitMatrix image,
                               int dimensionX,
@@ -63,14 +65,20 @@ public final class DefaultGridSampler extends GridSampler {
       transform.transformPoints(points);
       // Quick check to see if points transformed to something inside the image;
       // sufficient to check the endpoints
-      checkAndNudgePoints(image, points);
+      //checkAndNudgePoints(image, points);
       try {
         for (int x = 0; x < max; x += 2) {
+            if (DO_LOG) {
+                System.out.printf("(%f;%f;", points[x], points[x + 1]);
+            }
           if (image.get((int) (points[x]+0.5), (int) (points[x + 1]+0.5))) {
             // Black(-ish) pixel
             bits.set(x / 2, y);
           }
         }
+          if (DO_LOG) {
+              System.out.println();
+          }
       } catch (ArrayIndexOutOfBoundsException aioobe) {
         // This feels wrong, but, sometimes if the finder patterns are misidentified, the resulting
         // transform gets "twisted" such that it maps a straight line of points to a set of points

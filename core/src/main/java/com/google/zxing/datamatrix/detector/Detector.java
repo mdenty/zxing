@@ -48,10 +48,12 @@ public final class Detector {
   }
 
   private static final boolean DO_LOG = Boolean.getBoolean("zxing.datamatrix.debug");
+  private static final float DEFAULT_DIMENSION = Integer.parseInt(System.getProperty("zxing.datamatrix.transform.dimension", "50"));
   private static final float SAMPLING_CORRECTION = Float.parseFloat(System.getProperty("zxing.datamatrix.transform.correction.value", "0.2"));
-  private static final boolean CORRECT_POINTS = Boolean.getBoolean("zxing.datamatrix.disable.correct.corner.position");
-  private static final boolean USE_3_POINTS_IN_TRANSITION = Boolean.getBoolean("zxing.datamatrix.disable.3.points.sampler");
-  private static final boolean DETECT_MULTI_PIXELS_TRANSITION = Boolean.getBoolean("zxing.datamatrix.disable.transition.correction");
+  private static final float SAMPLING_CORRECTION_ON_TOP = Float.parseFloat(System.getProperty("zxing.datamatrix.transform.correction.top.value", "0.4"));
+  private static final boolean CORRECT_POINTS = !Boolean.getBoolean("zxing.datamatrix.disable.correct.corner.position");
+  private static final boolean USE_3_POINTS_IN_TRANSITION = !Boolean.getBoolean("zxing.datamatrix.disable.3.points.sampler");
+  private static final boolean DETECT_MULTI_PIXELS_TRANSITION = !Boolean.getBoolean("zxing.datamatrix.disable.transition.correction");
   private static final DatamatrixForm FORCE_SQUARE_DATAMATRIX;
 
   static {
@@ -360,18 +362,17 @@ public final class Detector {
 
     GridSampler sampler = GridSampler.getInstance();
 
-    float correction = SAMPLING_CORRECTION;
     return sampler.sampleGrid(image,
                               dimensionX,
                               dimensionY,
-                              correction,
-                              correction,
-                              dimensionX - correction,
-                              correction,
-                              dimensionX - correction,
-                              dimensionY - correction,
-                              correction,
-                              dimensionY - correction,
+                              SAMPLING_CORRECTION,
+                              SAMPLING_CORRECTION_ON_TOP,
+                              dimensionX - SAMPLING_CORRECTION,
+                              SAMPLING_CORRECTION_ON_TOP,
+                              dimensionX - SAMPLING_CORRECTION,
+                              dimensionY - SAMPLING_CORRECTION,
+                              SAMPLING_CORRECTION,
+                              dimensionY - SAMPLING_CORRECTION,
                               topLeft.getX(),
                               topLeft.getY(),
                               topRight.getX(),
@@ -383,7 +384,7 @@ public final class Detector {
   }
 
   private ResultPointsAndTransitions newTransitionsBetween(final ResultPoint from, final ResultPoint to) {
-    return newTransitionsBetween(from, to, 50);
+    return newTransitionsBetween(from, to, DEFAULT_DIMENSION);
   }
 
   private ResultPointsAndTransitions newTransitionsBetween(final ResultPoint from, final ResultPoint to, float dimension) {

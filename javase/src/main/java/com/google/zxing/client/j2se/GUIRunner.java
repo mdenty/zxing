@@ -24,6 +24,7 @@ import com.google.zxing.common.GlobalHistogramBinarizer;
 import com.google.zxing.common.HybridBinarizer;
 import com.google.zxing.datamatrix.DataMatrixReader;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.text.JTextComponent;
 import java.awt.*;
@@ -116,7 +117,8 @@ public final class GUIRunner extends JFrame {
 
       try (DirectoryStream<Path> stream = Files.newDirectoryStream(file)) {
         for (Path entry : stream) {
-          if (Files.isDirectory(entry)) {
+          if (Files.isDirectory(entry) ||
+                  entry.getFileName().toString().startsWith("BIN_")) {
             continue;
           }
           String decodeText = getDecodeText(entry);
@@ -142,6 +144,7 @@ public final class GUIRunner extends JFrame {
     }
     LuminanceSource source = new BufferedImageLuminanceSource(image);
     BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
+    saveBinarizedImage(file, bitmap);
     Result result;
     try {
       result = new DataMatrixReader().decode(bitmap);
@@ -149,6 +152,23 @@ public final class GUIRunner extends JFrame {
       return re.toString();
     }
     return String.valueOf(result.getText());
+  }
+
+  private static void saveBinarizedImage(Path image, BinaryBitmap bitmap) {
+    try {
+      BufferedImage im = new BufferedImage(bitmap.getWidth(), bitmap.getHeight(), BufferedImage.TYPE_BYTE_BINARY);
+      for (int y=0; y<bitmap.getHeight(); y++) {
+        for (int x=0; x<bitmap.getWidth(); x++) {
+          if (!bitmap.getBlackMatrix().get(x, y)) {
+            im.setRGB(x, y, Color.WHITE.getRGB());
+          }
+        }
+      }
+      File file = new File(image.getParent().toFile(), "BIN_" + image.getFileName());
+      ImageIO.write(im, "png", file);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
   }
 
 }
